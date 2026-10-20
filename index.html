@@ -150,13 +150,19 @@ section{margin-top:1.5rem}
   background:var(--text);color:var(--bg);padding:.7rem 1.1rem;border-radius:12px;max-width:min(92vw,480px);font-weight:600;font-size:.95rem}
 #toast[hidden]{display:none}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#voz{position:absolute;left:0;right:0;bottom:3.4rem;padding:0 1rem calc(env(safe-area-inset-bottom,0px) + .4rem);display:flex;flex-direction:column;align-items:center;gap:.6rem;pointer-events:none}
+#voz[hidden]{display:none}
+#vozTxt{max-width:34rem;max-height:7.5rem;overflow:auto;background:rgba(14,42,71,.86);color:#EAF4FB;border-radius:14px;padding:.55rem .9rem;font-size:.95rem;line-height:1.35;text-align:center}
+#vozTxt:empty{display:none}
+#btnVoz{pointer-events:auto;background:#F59E0B;color:#1F1400;border-color:#F59E0B;font-size:1.05rem;padding:.7rem 1.4rem}
+#btnVoz.on{background:#7C3AED;color:#fff;border-color:#7C3AED}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="brand">
     <span class="lens" aria-hidden="true"></span>
-    <div><h1>Lente DIA</h1><p>IA al Colorado · Alicia cobra vida al enfocarla</p></div>
+    <div><h1>Lente DIA</h1><p>IA al Colorado · Hablá con Alicia en realidad aumentada</p></div>
   </div>
   <button id="btnView" class="primary">Abrir cámara</button>
 </header>
@@ -213,6 +219,7 @@ section{margin-top:1.5rem}
     <button id="btnSound" class="hud-btn" hidden>Activar sonido</button>
   </div>
   <p id="hudMsg" role="status">Abriendo cámara…</p>
+  <div id="voz" hidden><p id="vozTxt" aria-live="polite"></p><button id="btnVoz" class="hud-btn">Hablar con Alicia</button></div>
 </div>
 
 <div id="busy" hidden><div class="busy-card"><p id="busyMsg"></p><div class="bar" id="busyBarWrap"><span id="busyBar"></span></div></div></div>
@@ -559,8 +566,82 @@ async function buildContent(THREE, GLTFLoader, it, video, sess) {
     sess.mixers.push(mx);
   }
   if (it.spin) sess.spinners.push(inner);
+  const rig = prepararAlicia(obj); if (rig) sess.alicia = rig;
   return { root: pivot };
 }
+
+/* ---------- Alicia: conversación por voz (ElevenLabs) y movimientos ---------- */
+const AGENTE_ID = 'agent_3801m4kmhmyeebvr66nb81xhmprd';
+const BAJA = { abrir: 0.0205, ancho: 0.0035, redondo: 0.009 };
+const REPOSO = [-0.08, 0.06, -0.5, 0.0];   // hombro x, hombro z, codo x, codo y del brazo libre
+const GESTOS = [[-0.55, 0.3, -1.4, 0.4], [-0.35, -0.05, -1.95, -0.75], [-0.45, 0.75, -0.9, 0.6], [-0.8, 0.4, -1.9, 0.3]];
+let conv = null, modoVoz = 'idle';
+const decir = (t) => { $('vozTxt').textContent = t || ''; };
+
+function prepararAlicia(obj) {
+  const n = (k) => obj.getObjectByName(k);
+  const A = { rostro: n('rostro'), mand: n('mandibula'), cabeza: n('cabeza'), pecho: n('pecho'), hombro: n('hombroI'), codo: n('codoI'),
+    parp: [n('parpado0'), n('parpado1')].filter(Boolean), t: 0, voz: 0, esc: 0, prox: 2, bt: -1, gi: 0, gt: 0, g: REPOSO.slice() };
+  if (!A.rostro || !A.rostro.morphTargetInfluences || !A.cabeza || !A.pecho) return null;
+  A.c0 = A.cabeza.rotation.clone(); A.p0 = A.pecho.rotation.clone();
+  if (A.codo) A.codo.rotation.order = 'YXZ';
+  return A;
+}
+
+function animarAlicia(A, dt, c, modo) {
+  A.t += dt; const t = A.t, habla = modo === 'speaking';
+  let nivel = 0; if (habla && c) { try { nivel = c.getOutputVolume ? c.getOutputVolume() : 0; } catch (e) {} }
+  A.voz += ((habla ? Math.min(1, nivel * 2.8 + 0.08) : 0) - A.voz) * Math.min(1, dt * 16);
+  const v = A.voz, inf = A.rostro.morphTargetInfluences;   // boca: vocales abiertas, anchas y redondas
+  inf[0] = v * (0.65 + 0.35 * Math.sin(t * 11)); inf[1] = v * 0.4 * (0.5 + 0.5 * Math.sin(t * 7)); inf[2] = v * 0.35 * (0.5 + 0.5 * Math.sin(t * 5 + 1)); inf[3] = 0;
+  if (A.mand) { const b = BAJA.abrir * inf[0] + BAJA.ancho * inf[1] + BAJA.redondo * inf[2]; A.mand.position.set(0, -b, -0.3 * b); }
+  A.esc += ((modo === 'listening' ? 1 : 0) - A.esc) * Math.min(1, dt * 3);   // al escuchar inclina la cabeza
+  A.cabeza.rotation.set(A.c0.x + Math.sin(t * 0.9) * 0.02 + (habla ? Math.sin(t * 2.6) * 0.04 * (0.4 + v) : 0), A.c0.y + Math.sin(t * 0.45) * 0.06, A.c0.z + 0.07 * A.esc);
+  A.pecho.rotation.set(A.p0.x + Math.sin(t * 1.2) * 0.008, A.p0.y + Math.sin(t * 0.5) * (habla ? 0.04 : 0.015), A.p0.z);
+  A.prox -= dt; if (A.prox <= 0 && A.bt < 0) { A.bt = 0; A.prox = 2.2 + Math.random() * 3.8; }
+  let cierre = 0; if (A.bt >= 0) { A.bt += dt; cierre = Math.sin(Math.min(A.bt / 0.16, 1) * Math.PI); if (A.bt > 0.16) A.bt = -1; }
+  A.parp.forEach((p) => { p.rotation.x = -0.24 + cierre * 1.35 - 0.06 * A.esc; });
+  A.gt -= dt; if (A.gt <= 0) { A.gi = Math.floor(Math.random() * GESTOS.length); A.gt = 1.8 + Math.random() * 1.8; }
+  const meta = habla ? GESTOS[A.gi] : REPOSO, k = Math.min(1, dt * 3.5);
+  for (let i = 0; i < 4; i++) A.g[i] += (meta[i] - A.g[i]) * k;
+  if (A.hombro && A.codo) { A.hombro.rotation.set(A.g[0] - v * 0.07, 0, A.g[1]); A.codo.rotation.set(A.g[2] - v * 0.14, A.g[3], 0); }
+}
+
+async function cargarSDK() {
+  for (const u of ['https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.26.0/+esm', 'https://esm.sh/@elevenlabs/client@1.26.0']) {
+    try { const m = await import(u); if (m.Conversation) return m; } catch (e) { console.warn('SDK no disponible en', u, e); }
+  }
+  throw new Error('sdk');
+}
+function motivoFallo(t) {
+  const s = String(t || '').toLowerCase();
+  if (/quota|credit|crédit/.test(s)) return 'Sin créditos en ElevenLabs: se agotaron los de la cuenta. Esperá a que se renueven o agregá créditos.';
+  if (/concurren|too many|rate limit|limit exceeded/.test(s)) return 'ElevenLabs alcanzó su límite de conversaciones simultáneas. Esperá unos minutos.';
+  if (/not.?found|404/.test(s)) return 'No se encontró el agente. Revisá el ID del agente.';
+  if (/auth|origin|allowlist|private|permission|forbidden|401|403|notallowed|denied/.test(s)) return 'No hay permiso para conectar: revisá que el agente sea público y que el navegador tenga acceso al micrófono.';
+  if (s === 'sdk') return 'No cargó la librería de ElevenLabs. Revisá tu conexión.';
+  return 'No se pudo conectar con Alicia.' + (s ? ' ElevenLabs informó: ' + String(t).slice(0, 140) : '');
+}
+const avisarFallo = (t) => { console.warn('Fallo de voz:', t); decir(motivoFallo(t)); };
+function estadoVoz(m) { modoVoz = m; $('btnVoz').classList.toggle('on', m !== 'idle'); $('btnVoz').textContent = m === 'idle' ? 'Hablar con Alicia' : 'Terminar'; }
+function finVoz() { conv = null; estadoVoz('idle'); }
+async function iniciarVoz() {
+  $('btnVoz').disabled = true; decir('Conectando con Alicia…');
+  try {
+    const { Conversation } = await cargarSDK();
+    conv = await Conversation.startSession({
+      agentId: AGENTE_ID, connectionType: 'websocket',
+      onConnect: () => { estadoVoz('listening'); decir('Te escucho. Hablale a Alicia.'); },
+      onDisconnect: (d) => { const msg = String((d && (d.message || (d.context && d.context.reason) || d.closeReason)) || ''), cod = d && (d.closeCode != null ? d.closeCode : d.context && d.context.code); finVoz(); if ((d && d.reason === 'error') || (cod && cod !== 1000)) avisarFallo(msg || 'error ' + cod); },
+      onError: (e) => { console.error(e); avisarFallo(typeof e === 'string' ? e : e && e.message); },
+      onModeChange: ({ mode }) => { modoVoz = mode === 'speaking' ? 'speaking' : 'listening'; },
+      onMessage: (m) => { const q = m.source || m.role, tx = m.message || m.text || ''; if (tx) decir(q === 'ai' || q === 'agent' ? tx : 'Vos: ' + tx); }
+    });
+  } catch (e) { console.error(e); finVoz(); avisarFallo(e.message); }
+  finally { $('btnVoz').disabled = false; }
+}
+async function terminarVoz() { const c = conv; finVoz(); try { if (c) await c.endSession(); } catch (e) {} }
+$('btnVoz').addEventListener('click', () => conv ? (terminarVoz(), decir('')) : iniciarVoz());
 
 async function startAR(videos) {
   showBusy('Cargando el motor de realidad aumentada…', null);
@@ -604,11 +685,13 @@ async function startAR(videos) {
     };
   }
   await mindar.start();
+  $('voz').hidden = !sess.alicia;
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
     sess.mixers.forEach(m => m.update(dt));
     sess.spinners.forEach(o => o.rotation.y += dt * 0.8);
+    if (sess.alicia) animarAlicia(sess.alicia, dt, conv, modoVoz);
     renderer.render(scene, camera);
   });
   return sess;
@@ -657,6 +740,7 @@ async function closeViewer() {
     try { s.renderer.dispose(); } catch {}
   }
   $('arBox').innerHTML = '';
+  terminarVoz(); $('voz').hidden = true; decir('');
   $('viewer').hidden = true; $('btnSound').hidden = true;
   $('reticle').classList.remove('locked');
   document.body.classList.remove('ar-on');
