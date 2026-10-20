@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lente DIA — Realidad aumentada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/"
+}}
+</script>
+<style>
+:root{
+  --bg:#EEF4FA;--surface:#FFFFFF;--surface2:#E3ECF5;--line:rgba(14,42,71,.14);
+  --text:#0E2A47;--muted:#4A6580;--cel:#0284C7;--vio:#6D28D9;--amb:#F59E0B;--on-amb:#1F1400;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E2A47;--surface:#133559;--surface2:#0B2340;--line:rgba(56,189,248,.22);
+    --text:#EAF4FB;--muted:#9DB6CC;--cel:#38BDF8;--vio:#8B5CF6;--amb:#F59E0B;--on-amb:#1F1400;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E2A47;--surface:#133559;--surface2:#0B2340;--line:rgba(56,189,248,.22);
+  --text:#EAF4FB;--muted:#9DB6CC;--cel:#38BDF8;--vio:#8B5CF6;--amb:#F59E0B;--on-amb:#1F1400;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:1rem;line-height:1.5;-webkit-font-smoothing:antialiased}
+body.ar-on{overflow:hidden}
+img,video{max-width:100%;display:block}
+button,input,label{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--cel);outline-offset:2px;border-radius:6px}
+
+.top{max-width:760px;margin:0 auto;padding:1.25rem 1.25rem .5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:.85rem}
+.lens{width:46px;height:46px;border-radius:50%;flex:none;position:relative;
+  background:radial-gradient(circle at 35% 35%,var(--cel) 0 18%,transparent 19%),
+             radial-gradient(circle,var(--surface2) 0 52%,var(--vio) 53% 62%,var(--surface2) 63% 100%);
+  box-shadow:inset 0 0 0 3px var(--amb)}
+h1{margin:0;font-size:1.75rem;font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.brand p{margin:.15rem 0 0;color:var(--muted);font-size:.95rem}
+h2{font-size:1.15rem;font-weight:800;margin:0 0 .75rem;letter-spacing:-.01em}
+
+main{max-width:760px;margin:0 auto;padding:.5rem 1.25rem 3rem}
+section{margin-top:1.5rem}
+
+.primary{background:var(--amb);color:var(--on-amb);border:0;border-radius:999px;padding:.7rem 1.3rem;font-weight:800;cursor:pointer}
+.primary:disabled{opacity:.4;cursor:not-allowed}
+.ghost{background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:.4rem .9rem;cursor:pointer;font-weight:600;font-size:.9rem}
+.ghost:hover{border-color:var(--cel)}
+
+.add{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:1.1rem}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem}
+@media (max-width:560px){.pick{grid-template-columns:1fr}}
+.slot{position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;
+  padding:.8rem;border:2px dashed var(--line);border-radius:14px;cursor:pointer;min-height:84px}
+.slot:hover,.slot:focus-within{border-color:var(--cel)}
+.slot.ok{border-style:solid;border-color:var(--cel)}
+.slot input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.slot .n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--surface2);font-weight:800;font-size:.9rem}
+.slot.ok .n{background:var(--cel);color:var(--bg)}
+.slot-body strong{display:block}
+.slot-body small{color:var(--muted);font-size:.85rem;line-height:1.3;display:block}
+.prev{width:56px;height:56px;border-radius:10px;overflow:hidden;background:var(--surface2);display:grid;place-items:center;font-weight:800;font-size:.8rem}
+.prev:empty{display:none}
+.prev img,.prev video{width:100%;height:100%;object-fit:cover}
+
+.list-head{display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.25rem}
+.list-head h2{margin:0}
+#count{color:var(--muted);font-weight:600}
+.tools{display:flex;gap:.5rem}
+.btnlike{display:inline-block}
+.empty{color:var(--muted);padding:1.5rem 0}
+
+.pair{display:grid;grid-template-columns:auto 1fr;gap:1rem;align-items:center;padding:1rem 0;border-bottom:1px solid var(--line)}
+@media (max-width:560px){.pair{grid-template-columns:1fr}}
+.pair-media{display:flex;align-items:center;gap:.5rem}
+.pair figure{margin:0;text-align:center}
+.pair figcaption{font-size:.78rem;color:var(--muted);margin-top:.3rem}
+.mk{position:relative}
+.mk img,.ct-box{width:92px;height:92px;border-radius:8px;object-fit:cover}
+.mk::before,.mk::after{content:"";position:absolute;width:18px;height:18px;border:3px solid var(--cel);pointer-events:none}
+.mk::before{top:-5px;left:-5px;border-right:0;border-bottom:0;border-top-left-radius:6px}
+.mk::after{top:71px;right:-5px;border-left:0;border-top:0;border-bottom-right-radius:6px}
+.link{width:26px;height:3px;background:var(--amb);border-radius:2px;margin-bottom:1.3rem}
+.ct-box{overflow:hidden;background:var(--surface2);display:grid;place-items:center}
+.ct-box img,.ct-box video{width:100%;height:100%;object-fit:cover}
+.k-image .ct-box img{object-fit:contain}
+.m3d{width:100%;height:100%;display:grid;place-items:center;align-content:center;background:var(--vio);color:#fff;padding:.3rem}
+.m3d b{font-size:1.6rem;line-height:1}
+.m3d span{font-size:.65rem;opacity:.85;word-break:break-all;line-height:1.15;margin-top:.2rem}
+.pair-ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1rem}
+.range{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:.95rem}
+.range output{min-width:2.6rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.range input{accent-color:var(--amb);width:130px}
+.opts{display:flex;gap:.9rem;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:.35rem;font-size:.95rem;cursor:pointer}
+.chk input{accent-color:var(--cel);width:18px;height:18px}
+.del{margin-left:auto}
+
+.tips{margin-top:2rem;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:.9rem 1.1rem}
+.tips summary{font-weight:800;cursor:pointer}
+.tips ul{margin:.6rem 0 0;padding-left:1.2rem;color:var(--muted)}
+.tips li{margin:.25rem 0}
+
+#viewer{position:fixed;inset:0;z-index:50;background:#000}
+#viewer[hidden]{display:none}
+#arBox{position:absolute;inset:0;overflow:hidden}
+.hud{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + .8rem) 1rem .8rem;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;z-index:5;pointer-events:none}
+.hud-btn{pointer-events:auto;background:rgba(14,42,71,.82);color:#EAF4FB;border:1.5px solid rgba(56,189,248,.5);border-radius:999px;padding:.55rem 1.1rem;font-weight:700;cursor:pointer;backdrop-filter:blur(6px)}
+#btnSound{background:#F59E0B;color:#1F1400;border-color:#F59E0B}
+#hudMsg{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 1.5rem);
+  margin:0;background:rgba(14,42,71,.82);color:#EAF4FB;padding:.55rem 1.1rem;border-radius:999px;font-weight:600;white-space:nowrap;z-index:5}
+.reticle{position:absolute;left:50%;top:50%;width:min(62vw,300px);aspect-ratio:1;transform:translate(-50%,-50%);z-index:4;pointer-events:none;
+  background:
+    linear-gradient(#38BDF8,#38BDF8) top left/36px 4px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) top left/4px 36px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) top right/36px 4px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) top right/4px 36px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) bottom left/36px 4px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) bottom left/4px 36px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) bottom right/36px 4px no-repeat,
+    linear-gradient(#38BDF8,#38BDF8) bottom right/4px 36px no-repeat;
+  transition:opacity .3s, width .3s;animation:breathe 2.4s ease-in-out infinite}
+.reticle.locked{opacity:0;width:min(40vw,200px)}
+@keyframes breathe{50%{width:min(58vw,280px)}}
+@media (prefers-reduced-motion:reduce){.reticle{animation:none;transition:none}}
+
+#busy{position:fixed;inset:0;z-index:60;background:rgba(5,15,28,.7);display:grid;place-items:center;padding:1.5rem}
+#busy[hidden]{display:none}
+.busy-card{background:var(--surface);color:var(--text);border-radius:18px;padding:1.3rem 1.4rem;width:min(92vw,360px)}
+.busy-card p{margin:0 0 .8rem;font-weight:600}
+.bar{height:8px;border-radius:99px;background:var(--surface2);overflow:hidden}
+.bar span{display:block;height:100%;width:0;background:var(--amb);transition:width .2s}
+.bar.ind span{width:35%;animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 1.2rem);transform:translateX(-50%);z-index:70;
+  background:var(--text);color:var(--bg);padding:.7rem 1.1rem;border-radius:12px;max-width:min(92vw,480px);font-weight:600;font-size:.95rem}
+#toast[hidden]{display:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="lens" aria-hidden="true"></span>
+    <div><h1>Lente DIA</h1><p>IA al Colorado · Alicia cobra vida al enfocarla</p></div>
+  </div>
+  <button id="btnView" class="primary">Abrir cámara</button>
+</header>
+
+<main>
+  <section class="add" aria-labelledby="addT">
+    <h2 id="addT">Nuevo par</h2>
+    <div class="pick">
+      <label class="slot" id="slotT">
+        <input type="file" id="inT" accept="image/*">
+        <span class="n">1</span>
+        <span class="slot-body"><strong>Marcador</strong><small>La imagen que vas a enfocar con la cámara (JPG o PNG)</small></span>
+        <span class="prev" id="prevT"></span>
+      </label>
+      <label class="slot" id="slotC">
+        <input type="file" id="inC" accept="image/*,video/*,.glb,.gltf">
+        <span class="n">2</span>
+        <span class="slot-body"><strong>Lo que aparece</strong><small>Imagen PNG/JPG, video o figura 3D (.glb)</small></span>
+        <span class="prev" id="prevC"></span>
+      </label>
+    </div>
+    <button id="btnAdd" class="primary" disabled>Agregar par</button>
+  </section>
+
+  <section aria-labelledby="listT">
+    <div class="list-head">
+      <h2 id="listT">Tus pares <span id="count"></span></h2>
+      <div class="tools">
+        <button id="btnExport" class="ghost">Exportar proyecto</button>
+        <label class="ghost btnlike" tabindex="0">Importar<input type="file" id="inImport" accept=".json,application/json" class="sr"></label>
+      </div>
+    </div>
+    <div id="list"></div>
+    <p class="empty" id="empty">Todavía no hay pares. Cargá un marcador y lo que querés que aparezca encima.</p>
+  </section>
+
+  <details class="tips">
+    <summary>Cómo elegir buenos marcadores</summary>
+    <ul>
+      <li>Usá imágenes con mucho detalle y bordes: fotos, ilustraciones, tapas de libros.</li>
+      <li>Evitá fondos lisos, degradés suaves y logos muy simples: la cámara no los reconoce.</li>
+      <li>No uses dos marcadores parecidos entre sí.</li>
+      <li>Imprimilos o mostralos en pantalla con buena luz y sin reflejos.</li>
+      <li>Las figuras 3D tienen que ser .glb con las texturas incluidas.</li>
+    </ul>
+  </details>
+</main>
+
+<div id="viewer" hidden>
+  <div id="arBox"></div>
+  <div class="reticle" id="reticle"></div>
+  <div class="hud">
+    <button id="btnClose" class="hud-btn">Cerrar</button>
+    <button id="btnSound" class="hud-btn" hidden>Activar sonido</button>
+  </div>
+  <p id="hudMsg" role="status">Abriendo cámara…</p>
+</div>
+
+<div id="busy" hidden><div class="busy-card"><p id="busyMsg"></p><div class="bar" id="busyBarWrap"><span id="busyBar"></span></div></div></div>
+<div id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  function show(msg) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = 'Error: ' + msg; t.hidden = false;
+  }
+  window.addEventListener('error', function (e) { show(e.message || 'desconocido'); });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason; show((r && (r.message || r.name)) || String(r));
+  });
+  setTimeout(function () {
+    if (!window.__lenteOK) show('la app no terminó de cargar. Recargá la página.');
+  }, 6000);
+})();
+</script>
+<script type="module">
+const MINDAR_IMAGE = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+const MINDAR_THREE = 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
+const TARGET_URL = 'lente-dia://marcadores.mind';
+const $ = id => document.getElementById(id);
+
+/* Los marcadores compilados se entregan a MindAR sin pasar por la red */
+let currentMind = null;
+let fetchPatched = false;
+try {
+  const nativeFetch = window.fetch.bind(window);
+  const patched = function (u, o) {
+    const url = typeof u === 'string' ? u : (u && u.url);
+    if (url === TARGET_URL && currentMind) return Promise.resolve(new Response(currentMind));
+    return nativeFetch(u, o);
+  };
+  try { window.fetch = patched; } catch { Object.defineProperty(window, 'fetch', { value: patched, configurable: true, writable: true }); }
+  fetchPatched = window.fetch === patched;
+} catch (e) { console.warn('fetch no modificable', e); }
+let targetBlobUrl = null;
+function targetSrc() {
+  if (fetchPatched) return TARGET_URL;
+  if (targetBlobUrl) URL.revokeObjectURL(targetBlobUrl);
+  targetBlobUrl = URL.createObjectURL(new Blob([currentMind]));
+  return targetBlobUrl;
+}
+
+/* ---------- Almacenamiento local (IndexedDB) ---------- */
+let dbp = null;
+function db() {
+  if (!dbp) dbp = new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open('lente-dia', 1);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' });
+        if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  });
+  return dbp;
+}
+function req(name, mode, op) {
+  return db().then(d => new Promise((res, rej) => {
+    const t = d.transaction(name, mode);
+    const r = op(t.objectStore(name));
+    t.oncomplete = () => res(r && 'result' in r ? r.result : undefined);
+    t.onerror = () => rej(t.error);
+    t.onabort = () => rej(t.error);
+  }));
+}
+const store = {
+  all: () => req('items', 'readonly', s => s.getAll()).catch(() => []),
+  put: it => req('items', 'readwrite', s => s.put(it)).catch(e => { console.warn(e); toast('No se pudo guardar en este dispositivo. Puede que el archivo sea muy pesado.'); }),
+  del: id => req('items', 'readwrite', s => s.delete(id)).catch(() => {}),
+  getMeta: k => req('meta', 'readonly', s => s.get(k)).catch(() => undefined),
+  setMeta: (k, v) => req('meta', 'readwrite', s => s.put(v, k)).catch(() => {})
+};
+
+/* ---------- Utilidades ---------- */
+const urlCache = new WeakMap();
+function urlOf(blob) {
+  if (!urlCache.has(blob)) urlCache.set(blob, URL.createObjectURL(blob));
+  return urlCache.get(blob);
+}
+function kindOf(f) {
+  const n = (f.name || '').toLowerCase();
+  if (n.endsWith('.glb') || n.endsWith('.gltf') || f.type === 'model/gltf-binary') return 'model';
+  if (f.type.startsWith('video/')) return 'video';
+  if (f.type.startsWith('image/')) return 'image';
+  return null;
+}
+const kindLabel = { image: 'Imagen', video: 'Video', model: 'Figura 3D' };
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+
+let toastT;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 4500);
+}
+function showBusy(msg, p) {
+  $('busy').hidden = false; $('busyMsg').textContent = msg;
+  $('busyBarWrap').classList.toggle('ind', p == null);
+  $('busyBar').style.width = p == null ? '' : p + '%';
+}
+function hideBusy() { $('busy').hidden = true; }
+
+/* ---------- Editor ---------- */
+let items = [];
+let pendingT = null, pendingC = null;
+
+function preview(el, file, kind) {
+  el.innerHTML = '';
+  if (kind === 'model') { el.textContent = '3D'; return; }
+  const m = document.createElement(kind === 'video' ? 'video' : 'img');
+  m.src = urlOf(file);
+  if (kind === 'video') { m.muted = true; m.playsInline = true; }
+  el.appendChild(m);
+}
+function refreshAdd() {
+  $('slotT').classList.toggle('ok', !!pendingT);
+  $('slotC').classList.toggle('ok', !!pendingC);
+  $('btnAdd').disabled = !(pendingT && pendingC);
+}
+$('inT').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (kindOf(f) !== 'image') { toast('El marcador tiene que ser una imagen JPG o PNG.'); return; }
+  pendingT = f; preview($('prevT'), f, 'image'); refreshAdd();
+});
+$('inC').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const k = kindOf(f);
+  if (!k) { toast('Ese formato no sirve. Usá PNG, JPG, un video o una figura .glb.'); return; }
+  pendingC = f; preview($('prevC'), f, k); refreshAdd();
+});
+$('btnAdd').addEventListener('click', async () => {
+  const it = {
+    id: newId(), created: Date.now(),
+    target: pendingT, targetName: pendingT.name,
+    kind: kindOf(pendingC), content: pendingC, contentName: pendingC.name,
+    scale: 1, audio: true, loop: true, spin: false
+  };
+  items.push(it);
+  await store.put(it);
+  pendingT = pendingC = null;
+  $('inT').value = ''; $('inC').value = '';
+  $('prevT').innerHTML = ''; $('prevC').innerHTML = '';
+  refreshAdd(); render();
+  toast('Par agregado.');
+});
+
+function checkbox(label, key, it) {
+  const l = document.createElement('label'); l.className = 'chk';
+  const i = document.createElement('input'); i.type = 'checkbox'; i.checked = !!it[key];
+  i.addEventListener('change', () => { it[key] = i.checked; store.put(it); });
+  l.append(i, document.createTextNode(label));
+  return l;
+}
+function card(it, i) {
+  const el = document.createElement('article');
+  el.className = 'pair k-' + it.kind;
+  el.innerHTML = `
+    <div class="pair-media">
+      <figure class="mk"><img alt=""><figcaption>Marcador ${i + 1}</figcaption></figure>
+      <span class="link" aria-hidden="true"></span>
+      <figure class="ct"><div class="ct-box"></div><figcaption>${kindLabel[it.kind]}</figcaption></figure>
+    </div>
+    <div class="pair-ctrl">
+      <label class="range">Tamaño <output></output><input type="range" min="0.3" max="3" step="0.1"></label>
+      <div class="opts"></div>
+      <button class="ghost del">Borrar</button>
+    </div>`;
+  const mk = el.querySelector('.mk img');
+  mk.src = urlOf(it.target); mk.alt = 'Marcador ' + (i + 1);
+
+  const box = el.querySelector('.ct-box');
+  if (it.kind === 'image') {
+    const im = document.createElement('img'); im.src = urlOf(it.content); im.alt = it.contentName; box.appendChild(im);
+  } else if (it.kind === 'video') {
+    const v = document.createElement('video'); v.src = urlOf(it.content); v.muted = true; v.playsInline = true; v.preload = 'metadata';
+    v.addEventListener('loadedmetadata', () => { try { v.currentTime = Math.min(0.5, v.duration / 2); } catch {} }, { once: true });
+    box.appendChild(v);
+  } else {
+    const d = document.createElement('div'); d.className = 'm3d';
+    const b = document.createElement('b'); b.textContent = '3D';
+    const s = document.createElement('span'); s.textContent = it.contentName;
+    d.append(b, s); box.appendChild(d);
+  }
+
+  const rng = el.querySelector('.range input'), out = el.querySelector('.range output');
+  rng.value = it.scale; out.textContent = '×' + Number(it.scale).toFixed(1);
+  rng.addEventListener('input', () => { it.scale = parseFloat(rng.value); out.textContent = '×' + it.scale.toFixed(1); });
+  rng.addEventListener('change', () => store.put(it));
+
+  const opts = el.querySelector('.opts');
+  if (it.kind === 'video') { opts.append(checkbox('Con sonido', 'audio', it), checkbox('Repetir', 'loop', it)); }
+  if (it.kind === 'model') { opts.append(checkbox('Girar solo', 'spin', it)); }
+
+  el.querySelector('.del').addEventListener('click', async () => {
+    if (!confirm('¿Borrar el par ' + (i + 1) + '?')) return;
+    items = items.filter(x => x.id !== it.id);
+    await store.del(it.id); render();
+  });
+  return el;
+}
+function render() {
+  const list = $('list'); list.innerHTML = '';
+  $('count').textContent = items.length ? `(${items.length})` : '';
+  $('empty').hidden = items.length > 0;
+  items.forEach((it, i) => list.appendChild(card(it, i)));
+}
+
+/* ---------- Exportar / importar ---------- */
+function blobToDataURL(b) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+}
+function dataURLToBlob(u) {
+  const comma = u.indexOf(',');
+  const mime = (u.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+  const bin = atob(u.slice(comma + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+$('btnExport').addEventListener('click', async () => {
+  if (!items.length) { toast('No hay pares para exportar.'); return; }
+  showBusy('Armando el archivo del proyecto…', null);
+  try {
+    const out = [];
+    for (const it of items) out.push({ ...it, target: await blobToDataURL(it.target), content: await blobToDataURL(it.content) });
+    const blob = new Blob([JSON.stringify({ app: 'lente-dia', v: 1, items: out })], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'proyecto-lente-dia.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) { console.error(e); toast('No se pudo exportar el proyecto.'); }
+  hideBusy();
+});
+$('inImport').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  showBusy('Importando proyecto…', null);
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== 'lente-dia' || !Array.isArray(data.items)) throw new Error('formato');
+    for (const raw of data.items) {
+      const it = { ...raw, id: newId(), created: Date.now() + items.length, target: dataURLToBlob(raw.target), content: dataURLToBlob(raw.content) };
+      items.push(it); await store.put(it);
+    }
+    render(); toast('Proyecto importado.');
+  } catch (err) { console.error(err); toast('Ese archivo no es un proyecto de Lente DIA.'); }
+  hideBusy(); e.target.value = '';
+});
+
+/* ---------- Compilación de marcadores ---------- */
+function prepImg(blob) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const max = 1024, k = Math.min(1, max / Math.max(im.width, im.height));
+      if (k === 1) return res(im);
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      res(c);
+    };
+    im.onerror = () => rej(new Error('imagen'));
+    im.src = urlOf(blob);
+  });
+}
+async function ensureCompiled() {
+  const sig = items.map(i => i.id).join('|');
+  const cached = await store.getMeta('mind');
+  if (cached && cached.sig === sig && cached.data) return cached.data;
+  showBusy('Preparando marcadores…', 0);
+  try {
+    const m = await import(MINDAR_IMAGE);
+    const Compiler = m.Compiler || (window.MINDAR && window.MINDAR.IMAGE.Compiler);
+    const imgs = [];
+    for (const it of items) imgs.push(await prepImg(it.target));
+    const c = new Compiler();
+    await c.compileImageTargets(imgs, p => showBusy(`Preparando marcadores ${Math.round(p)}%`, Math.round(p)));
+    const data = await c.exportData();
+    await store.setMeta('mind', { sig, data });
+    return data;
+  } finally { hideBusy(); }
+}
+
+/* ---------- Visor de realidad aumentada ---------- */
+let session = null;
+
+function playVideo(v, it) {
+  v.loop = it.loop;
+  const p = v.play();
+  if (p) p.catch(() => {
+    if (!it.audio) return;
+    v.muted = true; v.play().catch(() => {});
+    const b = $('btnSound'); b.hidden = false;
+    b.onclick = () => { v.muted = false; v.play().catch(() => {}); b.hidden = true; };
+  });
+}
+
+async function buildContent(THREE, GLTFLoader, it, video, sess) {
+  const s = it.scale;
+  if (it.kind === 'image') {
+    const tex = await new THREE.TextureLoader().loadAsync(urlOf(it.content));
+    tex.encoding = THREE.sRGBEncoding;
+    const a = tex.image.height / tex.image.width;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(s, s * a),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+    mesh.position.z = 0.01;
+    return { root: mesh };
+  }
+  if (it.kind === 'video') {
+    const v = video;
+    await new Promise((res, rej) => {
+      if (v.readyState >= 1) return res();
+      v.addEventListener('loadedmetadata', res, { once: true });
+      v.addEventListener('error', () => rej(new Error('video')), { once: true });
+    });
+    const tex = new THREE.VideoTexture(v);
+    tex.encoding = THREE.sRGBEncoding;
+    const a = (v.videoHeight || 9) / (v.videoWidth || 16);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(s, s * a),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
+    mesh.position.z = 0.01;
+    return { root: mesh, show: () => playVideo(v, it), hide: () => v.pause() };
+  }
+  /* Figura 3D: se apoya parada sobre el marcador */
+  const buf = await it.content.arrayBuffer();
+  const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
+  const obj = gltf.scene;
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  obj.position.set(-center.x, -box.min.y, -center.z);
+  const inner = new THREE.Group(); inner.add(obj);
+  inner.scale.setScalar(s / (Math.max(size.x, size.y, size.z) || 1));
+  const pivot = new THREE.Group(); pivot.rotation.x = Math.PI / 2; pivot.add(inner);
+  if (gltf.animations && gltf.animations.length) {
+    const mx = new THREE.AnimationMixer(obj);
+    gltf.animations.forEach(cl => mx.clipAction(cl).play());
+    sess.mixers.push(mx);
+  }
+  if (it.spin) sess.spinners.push(inner);
+  return { root: pivot };
+}
+
+async function startAR(videos) {
+  showBusy('Cargando el motor de realidad aumentada…', null);
+  let THREE, GLTFLoader, MindARThree;
+  try {
+    THREE = await import('three');
+    ({ GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'));
+    const m = await import(MINDAR_THREE);
+    MindARThree = m.MindARThree || window.MINDAR.IMAGE.MindARThree;
+  } finally { hideBusy(); }
+
+  const mindar = new MindARThree({
+    container: $('arBox'), imageTargetSrc: targetSrc(), maxTrack: 1,
+    uiLoading: 'no', uiScanning: 'no', uiError: 'no',
+    filterMinCF: 0.0001, filterBeta: 0.001
+  });
+  const { renderer, scene, camera } = mindar;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x334466, 1.1));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.9); dl.position.set(0.5, 1, 2); scene.add(dl);
+
+  const sess = { mindar, renderer, videos, mixers: [], spinners: [], found: 0 };
+  session = sess;
+  const msg = $('hudMsg'), ret = $('reticle');
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const anchor = mindar.addAnchor(i);
+    let c;
+    try { c = await buildContent(THREE, GLTFLoader, it, videos.get(it.id), sess); }
+    catch (e) { console.error(e); toast(`No se pudo cargar el contenido del par ${i + 1}.`); continue; }
+    anchor.group.add(c.root);
+    anchor.onTargetFound = () => {
+      sess.found++; ret.classList.add('locked');
+      msg.textContent = `Marcador ${i + 1}: ${kindLabel[it.kind].toLowerCase()}`;
+      c.show && c.show();
+    };
+    anchor.onTargetLost = () => {
+      sess.found = Math.max(0, sess.found - 1);
+      if (!sess.found) { ret.classList.remove('locked'); msg.textContent = 'Apuntá a uno de tus marcadores'; }
+      c.hide && c.hide();
+    };
+  }
+  await mindar.start();
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    const dt = clock.getDelta();
+    sess.mixers.forEach(m => m.update(dt));
+    sess.spinners.forEach(o => o.rotation.y += dt * 0.8);
+    renderer.render(scene, camera);
+  });
+  return sess;
+}
+
+function cameraError(e) {
+  if (!window.isSecureContext) return 'La cámara solo funciona en páginas seguras (https). Subí el archivo a Netlify o GitHub Pages.';
+  if (e && e.name === 'NotFoundError') return 'No se encontró ninguna cámara en este dispositivo.';
+  return 'No se pudo abrir la cámara. Revisá que el navegador tenga permiso para usarla y volvé a intentar.';
+}
+
+async function openViewer() {
+  if (!items.length) { toast('Primero agregá al menos un par.'); return; }
+  /* Los videos se crean dentro del toque para que el navegador permita el sonido */
+  const videos = new Map();
+  for (const it of items) if (it.kind === 'video') {
+    const v = document.createElement('video');
+    v.src = urlOf(it.content); v.playsInline = true;
+    v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.loop = it.loop; v.muted = !it.audio; v.preload = 'auto';
+    const p = v.play(); if (p) p.then(() => v.pause()).catch(() => {});
+    videos.set(it.id, v);
+  }
+  try { currentMind = await ensureCompiled(); }
+  catch (e) { console.error(e); toast('No se pudieron preparar los marcadores. Probá con imágenes con más detalle.'); return; }
+
+  $('viewer').hidden = false; document.body.classList.add('ar-on');
+  $('hudMsg').textContent = 'Abriendo cámara…';
+  try {
+    await startAR(videos);
+    $('hudMsg').textContent = 'Apuntá a uno de tus marcadores';
+  } catch (e) {
+    console.error(e);
+    videos.forEach(v => v.pause());
+    await closeViewer();
+    toast(cameraError(e));
+  }
+}
+
+async function closeViewer() {
+  const s = session; session = null;
+  if (s) {
+    try { s.renderer.setAnimationLoop(null); } catch {}
+    try { s.mindar.stop(); } catch {}
+    s.videos.forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+    try { s.renderer.dispose(); } catch {}
+  }
+  $('arBox').innerHTML = '';
+  $('viewer').hidden = true; $('btnSound').hidden = true;
+  $('reticle').classList.remove('locked');
+  document.body.classList.remove('ar-on');
+}
+
+$('btnView').addEventListener('click', openViewer);
+$('btnClose').addEventListener('click', closeViewer);
+
+/* ---------- Inicio ---------- */
+render();
+window.__lenteOK = true;
+store.all().then(list => {
+  items = (list || []).filter(i => i && i.target && i.content).sort((a, b) => a.created - b.created);
+  render();
+}).catch(e => console.warn(e));
+</script>
+</body>
+</html>
